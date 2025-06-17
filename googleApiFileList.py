@@ -1,30 +1,15 @@
 #!/usr/bin/python3
 
 """
-
-  In order to run this script you need python3 and pip3 installed.
-
-  You also need some additional python modules. Please run
-
-    sudo pip3 install httplib2
-
-    sudo pip3 install --upgrade google-api-python-client
-
-
-
   To authenticate in Google follow the instructions at
 
   https://developers.google.com/drive/v3/web/quickstart/python
 
-  A client_secret.json file needs to placed in the same directory
+  A credentials.json file needs to placed in the same directory
 
   with this script. The link above contains the instruction on
 
-  how to obtain this file. Once you complete these steps run
-
-    python3 this_script.py --noauth_local_webserver
-
-  and follow the instructions
+  how to obtain this file.
 
 """
 
@@ -32,23 +17,13 @@ import httplib2
 
 import os
 
-from apiclient import discovery
+import os.path
 
-from oauth2client import client
-
-from oauth2client import tools
-
-from oauth2client.file import Storage
-
-try:
-
-    import argparse
-
-    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-
-except ImportError:
-
-    flags = None
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 import pandas as pd
 
@@ -58,13 +33,13 @@ import pandas as pd
 
 # at ~/.credentials/drive-python-quickstart.json
 
-SCOPES = 'https://www.googleapis.com/auth/drive.metadata.readonly'
+SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly']
 
 CLIENT_SECRET_FILE = 'credentials.json'
 
 APPLICATION_NAME = 'Drive API Python Quickstart'
 
-folder_id = 'ADD_GOOGLE_ID_HERE' #Set to id of the parent folder you want to list (should be content folder)
+folder_id = 'ADD FOLDER ID HERE' #Set to id of the parent folder you want to list (should be content folder)
 folder_list = []
 all_folders = []
 file_list = []
@@ -88,89 +63,76 @@ def get_credentials():
 
     """
 
-    home_dir = os.path.expanduser('~')
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists("token.json"):
+        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                "credentials.json", SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open("token.json", "w") as token:
+            token.write(creds.to_json())
 
-    credential_dir = os.path.join(home_dir, '.credentials')
+    return creds
 
-    if not os.path.exists(credential_dir):
-        os.makedirs(credential_dir)
-
-    credential_path = os.path.join(credential_dir,
-
-                                   'drive-python-quickstart.json')
-
-    store = Storage(credential_path)
-
-    credentials = store.get()
-
-    if not credentials or credentials.invalid:
-
-        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-
-        flow.user_agent = APPLICATION_NAME
-
-        if flags:
-
-            credentials = tools.run_flow(flow, store, flags)
-
-        else:  # Needed only for compatibility with Python 2.6
-
-            credentials = tools.run(flow, store)
-
-        print('Storing credentials to ' + credential_path)
-
-    return credentials
 
 
 def get_root_folder(): # get's folder list from original root folder
 
-    credentials = get_credentials()
+    service = build('drive', 'v3', credentials = creds)
 
-    http = credentials.authorize(httplib2.Http())
+    page_token = None
+    while True:
+        results = service.files().list(q="mimeType = 'application/vnd.google-apps.folder' and '"+folder_id+"' in parents",
+        pageSize=1000, fields="nextPageToken, files(id, mimeType)",pageToken=page_token, supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+        folders = results.get('files', [])
 
-    service = discovery.build('drive', 'v3', http=http)
+        if not folders:
+             print('No folders found.')
 
-    results = service.files().list(q="mimeType = 'application/vnd.google-apps.folder' and '"+folder_id+"' in parents",
+        else:
 
-        pageSize=1000, fields="nextPageToken, files(id, mimeType)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-
-    folders = results.get('files', [])
-
-    if not folders:
-
-        print('No folders found.')
-
-    else:
-
-        for folder in folders:
-            id = folder.get('id')
-            folder_list.append(id)
-
+            for folder in folders:
+                id = folder.get('id')
+                folder_list.append(id)
+        page_token = results.get('nextPageToken', None)
+        if page_token is None:
+            break
 
 def get_all_folders(folder_list): #creates list of all sub folder under root, keeps going until no folders underneath
 
     for folder in folder_list:
-        additional_folders = []
-        credentials = get_credentials()
+        page_token = None
+        while True:
+            additional_folders = []
+            service = build('drive', 'v3', credentials=creds)
+            results = service.files().list(
+                q="mimeType = 'application/vnd.google-apps.folder' and '" +folder+ "' in parents",
 
-        http = credentials.authorize(httplib2.Http())
+                pageSize=1000, fields="nextPageToken, files(id, mimeType)", pageToken=page_token,supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+            items = results.get('files', [])
 
-        service = discovery.build('drive', 'v3', http=http)
-        results = service.files().list(
-            q="mimeType = 'application/vnd.google-apps.folder' and '" +folder+ "' in parents",
-
-            pageSize=1000, fields="nextPageToken, files(id, mimeType)", supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
-        items = results.get('files', [])
-
-        for item in items:
-            id = item.get('id')
-            additional_folders.append(id)
-        if not additional_folders:
-            pass
-        else:
-            all_folders.extend(additional_folders)
-            folder_list = additional_folders
-            get_all_folders(folder_list)
+            for item in items:
+                id = item.get('id')
+                additional_folders.append(id)
+            if not additional_folders:
+                pass
+            else:
+               all_folders.extend(additional_folders)
+               folder_list = additional_folders
+               get_all_folders(folder_list)
+            page_token = results.get('nextPageToken', None)
+            if page_token is None:
+                break
 
 def merge(): #merges sub folder list with full list
     global full_list
@@ -182,11 +144,7 @@ def get_file_list(): #runs over each folder generating file list, for files over
 
 
     for folder in full_list:
-        credentials = get_credentials()
-
-        http = credentials.authorize(httplib2.Http())
-
-        service = discovery.build('drive', 'v3', http=http)
+        service = build('drive', 'v3', credentials=creds)
 
         page_token = None
         while True:
@@ -234,6 +192,7 @@ def get_file_list(): #runs over each folder generating file list, for files over
 
 
 if __name__ == '__main__':
+    creds = get_credentials()
     print('Collecting folder id list')
     get_root_folder()
     get_all_folders(folder_list)
