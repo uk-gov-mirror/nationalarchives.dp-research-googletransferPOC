@@ -7,8 +7,8 @@ filelist['other_format_version_identifier'] = ''
 pdfcopy = filelist[filelist['mimeType'] == 'application/vnd.google-apps.document']
 pdfcopy = pd.concat([pdfcopy, filelist[filelist['mimeType'] == 'application/vnd.google-apps.spreadsheet']])
 pdfcopy = pd.concat([pdfcopy, filelist[filelist['mimeType'] == 'application/vnd.google-apps.presentation']])
-content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [datetime.datetime.now().isoformat()], 'date_last_modified': [datetime.datetime.now().isoformat()], 'folder':['folder'], 'rights_copyright':['Crown Copyright'], 'legal_status':['Public Record(s)'],'held_by':['The National Archives, Kew']} #ading content folder in as this is the folder which it has been run form so does not get picked up by API
-content = pd.DataFrame(content, columns = ['identifier','file_name','date_created','date_last_modified','folder','rights_copyright','legal_status','held_by'])
+content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [datetime.datetime.now().isoformat()], 'date_last_modified': [datetime.datetime.now().isoformat()], 'folder':['folder'], 'rights_copyright':['Crown Copyright'], 'legal_status':['Public Record(s)'],'held_by':['The National Archives, Kew'], 'closure_type':['open_on_transfer'], 'closure_period':[0], 'foi_exemption_code':['open'],'title_public':['TRUE'], 'description_public':['TRUE']} #adding content folder in as this is the folder which it has been run form so does not get picked up by API
+content = pd.DataFrame(content, columns = ['identifier','file_name','date_created','date_last_modified','folder','rights_copyright','legal_status','held_by','closure_type','closure_period','foi_exemption_code','title_public','description_public'])
 content['date_last_modified'] = pd.to_datetime(content["date_last_modified"])
 content['date_last_modified'] = content.date_last_modified.map(
     lambda x: datetime.datetime.strftime(x, '%Y-%m-%dT%H:%M:%SZ'))
