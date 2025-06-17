@@ -14,7 +14,8 @@ filelist['original_file_name'] = filelist['file_name']
 filelist['file_name_note'] = ''
 filelist['archivist_note'] = ''
 filelist[''] = ''
-content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [datetime.datetime.now().isoformat()], 'date_last_modified': [datetime.datetime.now().isoformat()], 'folder':['folder']} #ading content folder in as this is the folder which it has been run form so does not get picked up by API
+now = datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [now], 'date_last_modified': [now], 'folder':['folder']} #ading content folder in as this is the folder which it has been run form so does not get picked up by API
 content = pd.DataFrame(content, columns = ['identifier','file_name','date_created','date_last_modified','folder'])
 
 def replace_shortcuts():
@@ -54,18 +55,13 @@ def rename_googledocs(): #renames google docs with appropriate new filename for 
 rename_googledocs()
 
 def rename_problem_files(): #renames caracters not allowed in file systems with, always leaves a note to say when filename has changed.
-    filelist['file_name'] = filelist['file_name'].str.replace("/","_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace("\\", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace(":", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace("*", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace("?", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace('"', '_', regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace(">", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace("<", "_", regex=True)
-    filelist['file_name'] = filelist['file_name'].str.replace("|", "_", regex=True)
+    filelist['file_name'] = filelist['file_name'].str.replace(r'[\\/:"*?"><|]', '_', regex=True)
     filelist['file_name'] = filelist['file_name'].str.strip()
 rename_problem_files()
 
+def rename_heif_files():
+    filelist['file_name'] = np.where((filelist.file_name.str.startswith('Ref')) & (filelist.mimeType == 'image/heif'), filelist['file_name'] + '.HEIC', filelist['file_name'])
+rename_heif_files()
 
 def rename_duplicates(): #renames duplicate files with numerical number
     filelist['file_name'] = filelist['file_name'].astype(str)
@@ -74,7 +70,7 @@ def rename_duplicates(): #renames duplicate files with numerical number
     c = filelist.groupby(["file_name", 'google_parent_id']).cumcount()
     c = c.astype(str)
     filelist['file_name'] = filesplit['Name'] + '(' + c + ')' + filesplit['Ext']
-    filelist['file_name'] = filelist['file_name'].str.replace("\(0\)", "",regex = True)
+    filelist['file_name'] = filelist['file_name'].str.replace(r"\(0\)", "",regex = True)
     note_filesplit = pd.DataFrame([os.path.splitext(f) for f in filelist.file_name], columns=['Note_Name', 'Note_Ext'])
     original_filesplit = pd.DataFrame([os.path.splitext(f) for f in filelist.original_file_name], columns=['Original_Name', 'Original_Ext'])
     filelist['file_name_split'] = note_filesplit['Note_Name']
@@ -85,8 +81,6 @@ def rename_duplicates(): #renames duplicate files with numerical number
     filelist['file_name_split'] = filelist['file_name_split'].str.replace(".gdraw", "",regex = True)
     filelist['file_name_split'] = filelist['file_name_split'].str.replace(".gjamboard", "",regex = True)
     filelist['file_name_note'] = np.where(filelist.file_name_split != filelist.original_file_name_split,'This filename has been adjusted from the original', filelist['file_name_note'])
-    print(filelist['file_name_split'])
-    print(filelist['original_file_name_split'])
     del filelist['file_name_split']
     del filelist['original_file_name_split']
 rename_duplicates()
@@ -103,7 +97,7 @@ def rename_folders(): #takes the identifier converts google id to file or folder
         for k, v in folder_dict.items():
             filelist['identifier'] = filelist['identifier'].str.replace(k,v)
 
-    filelist['identifier'] = filelist['identifier'].str.lstrip("('").str.replace("'\)", '/', regex=True).str.replace("', '", "/", regex=True).str.replace("',\)", '/', regex=True).str.lstrip(')')
+    filelist['identifier'] = filelist['identifier'].str.lstrip("('").str.replace(r"'\)", '/', regex=True).str.replace("', '", "/", regex=True).str.replace(r"',\)", '/', regex=True).str.lstrip(')')
     filelist['identifier'] = filelist['identifier'] + filelist['file_name']
     filelist['identifier'] = np.where(filelist.mimeType == 'application/vnd.google-apps.folder', filelist['identifier'] + '/', filelist['identifier'])
     filelist['identifier'] = 'content/' + filelist['identifier']
@@ -128,21 +122,21 @@ def convert_to_tna(): #adds in TNA standard fields, converts date to xdatetime
     content['rights_copyright'] = 'Crown Copyright'
     content['legal_status'] = 'Public Record(s)'
     content['held_by'] = 'The National Archives, Kew'
-    content['date_last_modified'] = pd.to_datetime(content["date_last_modified"])
-    content['date_last_modified'] = content.date_last_modified.map(lambda x: datetime.datetime.strftime(x, '%Y-%m-%dT%H:%M:%SZ'))
-    content['date_created'] = pd.to_datetime(content["date_created"])
-    content['date_created'] = content.date_created.map(lambda x: datetime.datetime.strftime(x, '%Y-%m-%dT%H:%M:%SZ'))
+    content['date_last_modified'] = pd.to_datetime(content["date_last_modified"], format='ISO8601', utc=True)
+    content['date_last_modified'] = content.date_last_modified.dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    content['date_created'] = pd.to_datetime(content["date_created"], format='ISO8601', utc=True)
+    content['date_created'] = content.date_created.dt.strftime('%Y-%m-%dT%H:%M:%SZ')
     content['original_identifier'] = ''
     content['other_format_version_identifier'] = ''
+    content['end_date'] = ''
+    content['note'] = ''
 
 convert_to_tna()
 
 content = content.sort_values('identifier') #sorted by identifer (as DROID would do)
 content = content[
-        ['identifier', 'file_name','description','original_file_name', 'folder', 'date_created', 'date_last_modified','checksum_md5', 'closure_type',
+        ['identifier', 'file_name','description','original_file_name', 'folder', 'date_created', 'date_last_modified','end_date','checksum_md5', 'closure_type',
          'closure_period', 'closure_start_date', 'foi_exemption_code', 'foi_exemption_asserted', 'title_public',
          'title_alternate','description_public','description_alternate', 'google_id', 'google_parent_id', 'rights_copyright', 'legal_status',
-         'held_by', 'mimeType','size', 'archivist_note','file_name_note','original_identifier','other_format_version_identifier']]
+         'held_by', 'mimeType','size','note', 'archivist_note','file_name_note','original_identifier','other_format_version_identifier']]
 content.to_csv('GoogleTestMetadata.csv', index=False)
-
-
