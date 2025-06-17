@@ -5,7 +5,7 @@ Scripts are authenticated using Python Quickstart example from Google - https://
 
 Python 3 is required to be installed. The Google Client library is required to run the script, this can be installed by running pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib. Additional libraries will also be required including pandas - see requirements.txt (you can use pip install -r requirements.txt to install all packages)
 
-For the download the CSV Validator cmd line is required. This can be downloaded here https://github.com/digital-preservation/csv-validator/releases/tag/1.2-RC2 (Download csv-validator-cmd-1.2-RC2-application.zip) This should be unpacked in the directory the scripts are run. This will validate the download and metadata.
+For the download the CSV Validator cmd line is required. This can be downloaded here https://github.com/digital-preservation/csv-validator/releases/tag/1.4.0 (Download csv-validator-cmd-1.2-RC2-application.zip) This should be unpacked in the directory the scripts are run. This will validate the download and metadata.
 
 The scripts need to be run in order as each script uses the output of the previous one. They should be run in this order - 1. GoogleApiFileList.py 2. GoogleDriveMetadata.py 3. addpdfversion.py 4. googleDownload.py
 

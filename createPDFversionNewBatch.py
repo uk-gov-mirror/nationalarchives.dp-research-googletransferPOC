@@ -7,8 +7,8 @@ filelist['other_format_version_identifier'] = ''
 pdfcopy = filelist[filelist['mimeType'] == 'application/vnd.google-apps.document']
 pdfcopy = pd.concat([pdfcopy, filelist[filelist['mimeType'] == 'application/vnd.google-apps.spreadsheet']])
 pdfcopy = pd.concat([pdfcopy, filelist[filelist['mimeType'] == 'application/vnd.google-apps.presentation']])
-content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [datetime.datetime.now().isoformat()], 'date_last_modified': [datetime.datetime.now().isoformat()], 'folder':['folder'], 'rights_copyright':['Crown Copyright'], 'legal_status':['Public Record(s)'],'held_by':['The National Archives, Kew']} #ading content folder in as this is the folder which it has been run form so does not get picked up by API
-content = pd.DataFrame(content, columns = ['identifier','file_name','date_created','date_last_modified','folder','rights_copyright','legal_status','held_by'])
+content = {'identifier': ['content/'], 'file_name': ['content'], 'date_created': [datetime.datetime.now().isoformat()], 'date_last_modified': [datetime.datetime.now().isoformat()], 'folder':['folder'], 'rights_copyright':['Crown Copyright'], 'legal_status':['Public Record(s)'],'held_by':['The National Archives, Kew'], 'closure_type':['open_on_transfer'], 'closure_period':[0], 'foi_exemption_code':['open'],'title_public':['TRUE'], 'description_public':['TRUE']} #adding content folder in as this is the folder which it has been run form so does not get picked up by API
+content = pd.DataFrame(content, columns = ['identifier','file_name','date_created','date_last_modified','folder','rights_copyright','legal_status','held_by','closure_type','closure_period','foi_exemption_code','title_public','description_public'])
 content['date_last_modified'] = pd.to_datetime(content["date_last_modified"])
 content['date_last_modified'] = content.date_last_modified.map(
     lambda x: datetime.datetime.strftime(x, '%Y-%m-%dT%H:%M:%SZ'))
@@ -65,11 +65,11 @@ content = pd.concat([content, pdfcopy], sort=True)
 
 content = content.sort_values('identifier')  # sorted by identifer (as DROID would do)
 content = content[
-        ['identifier', 'file_name', 'description', 'original_file_name', 'folder', 'date_created', 'date_last_modified',
+        ['identifier', 'file_name', 'description', 'original_file_name', 'folder', 'date_created', 'date_last_modified','end_date',
          'checksum_md5', 'closure_type',
          'closure_period', 'closure_start_date', 'foi_exemption_code', 'foi_exemption_asserted', 'title_public',
          'title_alternate', 'description_public', 'description_alternate', 'google_id', 'google_parent_id',
          'rights_copyright', 'legal_status',
-         'held_by', 'mimeType', 'size', 'archivist_note', 'file_name_note', 'original_identifier',
+         'held_by', 'mimeType', 'size','note', 'archivist_note', 'file_name_note', 'original_identifier',
          'other_format_version_identifier','standardDownloadLink','PDFDownloadLink']]
 content.to_csv('GoogleTestMetadataPDF.csv', index=False)

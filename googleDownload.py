@@ -2,78 +2,33 @@
 
 """
 
-  In order to run this script you need python3 and pip3 installed.
-
-  You also need some additional python modules. Please run
-
-    sudo pip3 install httplib2
-
-    sudo pip3 install --upgrade google-api-python-client
-
-
-
   To authenticate in Google follow the instructions at
 
   https://developers.google.com/drive/v3/web/quickstart/python
 
-  A client_secret.json file needs to placed in the same directory
+  A credentials.json file needs to placed in the same directory
 
   with this script. The link above contains the instruction on
 
-  how to obtain this file. Once you complete these steps run
-
-    python3 this_script.py --noauth_local_webserver
-
-  and follow the instructions
+  how to obtain this file.
 
 """
 
 import httplib2
-
 import os
-
 import shutil
-
-from apiclient import discovery
-
-from oauth2client import client
-
-from oauth2client import tools
-
-from oauth2client.file import Storage
-
-from datetime import datetime
-
-try:
-
-    import argparse
-
-    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-
-except ImportError:
-
-    flags = None
-
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 import csv
-series = 'TEST_1'
-batch = 'TEST1Y22HB001'
-validatePath = 'Downloads/'+datetime.today().strftime('%Y-%m-%d-%H_%M_%S')+'/' + batch + '/'
-downloadArea = validatePath + series + '/'
-downloadPath = '\\\\?\\' + downloadArea.replace('/','\\')
-schema = "GoogleSchema.csvs"
-closureSchema = "closure_v13.csvs"
-closureMetadata = 'closure_v13.csv'
-finalMetadata = 'metadata_GoogleSchema_'+batch+'.csv'
-downloadfinalMetadata = downloadArea+'/'+finalMetadata
-metadata = 'GoogleTestMetadata.csv'
-logfile = open("logfile"+datetime.today().strftime('%Y-%m-%d-%H_%M_%S')+".txt", "w+")
-wd = os.getcwd()
-
 import io
 from io import BytesIO
 from googleapiclient.http import MediaIoBaseDownload
 import datetime
 from datetime import date
+from datetime import datetime
 import os
 import hashlib
 import pandas as pd
@@ -82,12 +37,27 @@ import urllib.parse
 import subprocess
 import requests
 
+series = 'TEST_1'
+batch = 'TEST1Y22HB001'
+validatePath = 'C:/Downloads/'+datetime.today().strftime('%Y-%m-%d-%H_%M_%S')+'/' + batch + '/'
+validatorPath = "csv-validator-distribution-1.4.0-bin\\csv-validator-cmd.bat"
+downloadArea =  validatePath + series + '/'
+downloadPath = '\\\\?\\' + downloadArea.replace('/','\\')
+schema = "GoogleSchema.csvs"
+closureSchema = "closure_v13.csvs"
+closureMetadata = 'closure_v13.csv'
+finalMetadata = 'metadata_GoogleSchema_'+batch+'.csv'
+downloadfinalMetadata = downloadArea+'/'+finalMetadata
+metadata = 'GoogleTestMetadataPDF.csv'
+logfile = open("logfile"+datetime.today().strftime('%Y-%m-%d-%H_%M_%S')+".txt", "w+")
+wd = os.getcwd()
+
 
 # If modifying these scopes, delete your previously saved credentials
 
 # at ~/.credentials/drive-python-quickstart.json
 
-SCOPES = 'https://www.googleapis.com/auth/drive.readonly'
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
 
 CLIENT_SECRET_FILE = 'credentials.json'
 
@@ -111,58 +81,40 @@ def get_credentials():
 
     """
 
-    home_dir = os.path.expanduser('~')
-
-    credential_dir = os.path.join(home_dir, '.credentials')
-
-    if not os.path.exists(credential_dir):
-        os.makedirs(credential_dir)
-
-    credential_path = os.path.join(credential_dir,
-
-                                   'drive-python-quickstart.json')
-
-    store = Storage(credential_path)
-
-    credentials = store.get()
-
-    if not credentials or credentials.invalid:
-
-        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-
-        flow.user_agent = APPLICATION_NAME
-
-        if flags:
-
-            credentials = tools.run_flow(flow, store, flags)
-
-        else:  # Needed only for compatibility with Python 2.6
-
-            credentials = tools.run(flow, store)
-
-        print('Storing credentials to ' + credential_path)
-
-    return credentials
-
+    creds = None
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
+    if os.path.exists("token2.json"):
+        creds = Credentials.from_authorized_user_file("token2.json", SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                "credentials.json", SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open("token2.json", "w") as token:
+            token.write(creds.to_json())
+    return creds
+creds = get_credentials()
 
 def downloadFileList(): #using metadata file to recreate file structure of folders, and download files using api requests based on google id. Picks up mimetype of files, if google cloud formats converts to open office equivalant, if anything else downloads as is
-    credentials = get_credentials()
-
-    http = credentials.authorize(httplib2.Http())
-
-    service = discovery.build('drive', 'v3', http=http)
+    service = build('drive', 'v3', credentials = creds)
     with open(metadata, 'rt', encoding='utf8') as f:
-        next(f)
-        next(f)
-        reader = csv.reader(f)
-        for row in reader:
-            mimeType = row[22]
-            ID = row[17]
-            filepath = row[0]
+        reader = csv.DictReader(f)
+        for i, row in enumerate(reader):
+            if i == 0:
+                continue # skip content folder
+            mimeType = row['mimeType']
+            ID = row['google_id']
+            filepath = row['identifier']
             filepath = filepath.replace("/", "\\")
-            note = row[24]
-            standardDownloadLink = row[28]
-            PDFDownloadLink = row[29]
+            standardDownloadLink = row['standardDownloadLink']
+            PDFDownloadLink = row['PDFDownloadLink']
             if mimeType == 'application/vnd.google-apps.folder':
                 try:
                     os.makedirs(downloadPath + filepath)
@@ -194,8 +146,8 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                             print ("Download %d%%." % int(status.progress() * 100))
                     except:
                         try:
-                            headers = {'Authorization': 'Bearer {}'.format(credentials.access_token), 'User-Agent': 'Mozilla/5.0'}
-                            request = standardDownloadLink
+                            headers = {'Authorization': 'Bearer {}'.format(creds.token), 'User-Agent': 'Mozilla/5.0'}
+                            request = "https://docs.google.com/document/d/" + ID + '/export?format=docx'
                             response = requests.get(request, headers=headers)
                             open(downloadPath + filepath, 'wb').write(response.content)
                         except:
@@ -227,7 +179,7 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                             print("Download %d%%." % int(status.progress() * 100))
                     except:
                         try:
-                            headers = {'Authorization': 'Bearer {}'.format(credentials.access_token),
+                            headers = {'Authorization': 'Bearer {}'.format(creds.token),
                                            'User-Agent': 'Mozilla/5.0'}
                             request = standardDownloadLink
                             response = requests.get(request, headers=headers)
@@ -261,7 +213,7 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                             print("Download %d%%." % int(status.progress() * 100))
                     except:
                         try:
-                            headers = {'Authorization': 'Bearer {}'.format(credentials.access_token),
+                            headers = {'Authorization': 'Bearer {}'.format(creds.token),
                                        'User-Agent': 'Mozilla/5.0'}
                             request = standardDownloadLink
                             response = requests.get(request, headers=headers)
@@ -295,7 +247,7 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                             print("Download %d%%." % int(status.progress() * 100))
                     except:
                         try:
-                            headers = {'Authorization': 'Bearer {}'.format(credentials.access_token),
+                            headers = {'Authorization': 'Bearer {}'.format(creds.token),
                                            'User-Agent': 'Mozilla/5.0'}
                             request = standardDownloadLink
                             response = requests.get(request, headers=headers)
@@ -329,7 +281,7 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                             print("Download %d%%." % int(status.progress() * 100))
                     except:
                         try:
-                            headers = {'Authorization': 'Bearer {}'.format(credentials.access_token),
+                            headers = {'Authorization': 'Bearer {}'.format(creds.token),
                                        'User-Agent': 'Mozilla/5.0'}
                             request = standardDownloadLink
                             response = requests.get(request, headers=headers)
@@ -364,8 +316,8 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                                 print ("Download %d%%." % int(status.progress() * 100))
                         except:
                             try:
-                                headers = {'Authorization': 'Bearer {}'.format(credentials.access_token), 'User-Agent': 'Mozilla/5.0'}
-                                request = PDFDownloadLink
+                                headers = {'Authorization': 'Bearer {}'.format(creds.token), 'User-Agent': 'Mozilla/5.0'}
+                                request = "https://docs.google.com/document/d/" + ID + '/export?format=pdf'
                                 response = requests.get(request, headers=headers)
                                 open(downloadPath + filepath, 'wb').write(response.content)
                             except:
@@ -397,8 +349,8 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                                 print("Download %d%%." % int(status.progress() * 100))
                         except:
                             try:
-                                headers = {'Authorization': 'Bearer {}'.format(credentials.access_token), 'User-Agent': 'Mozilla/5.0'}
-                                request = PDFDownloadLink
+                                headers = {'Authorization': 'Bearer {}'.format(creds.token), 'User-Agent': 'Mozilla/5.0'}
+                                request = "https://docs.google.com/spreadsheets/d/" + ID + '/export?format=pdf'
                                 response = requests.get(request, headers=headers)
                                 open(downloadPath + filepath, 'wb').write(response.content)
                             except:
@@ -430,8 +382,8 @@ def downloadFileList(): #using metadata file to recreate file structure of folde
                                 print("Download %d%%." % int(status.progress() * 100))
                         except:
                             try:
-                                headers = {'Authorization': 'Bearer {}'.format(credentials.access_token), 'User-Agent': 'Mozilla/5.0'}
-                                request = PDFDownloadLink
+                                headers = {'Authorization': 'Bearer {}'.format(creds.token), 'User-Agent': 'Mozilla/5.0'}
+                                request = "https://docs.google.com/presentation/d/"+ID+'/export/pdf'
                                 response = requests.get(request, headers=headers)
                                 open(downloadPath + filepath, 'wb').write(response.content)
                             except:
@@ -594,11 +546,11 @@ def tidy_metadata(): #finishes of the rest of actions needed, generates sha256, 
     filelist['checksum'] = sha256
     filelist['checksum'] = np.where(filelist.checksum == 'None', '', filelist['checksum'])
     filelist['date_archivist_note'] = ''
-    filelist['date_archivist_note'] = np.where(~filelist['archivist_note'].isnull(), datetime.datetime.today().strftime('%d/%m/%Y'),filelist['date_archivist_note'])
+    filelist['date_archivist_note'] = np.where(~filelist['archivist_note'].isnull(), datetime.today().strftime('%d/%m/%Y'),filelist['date_archivist_note'])
 
     filelist = filelist[
-        ['identifier', 'file_name', 'folder','description', 'date_created', 'date_last_modified', 'checksum_md5', 'checksum', 'google_id', 'google_parent_id', 'rights_copyright', 'legal_status',
-         'held_by','archivist_note','date_archivist_note','original_identifier','other_format_version_identifier']]
+        ['identifier', 'file_name', 'folder','description', 'date_created', 'date_last_modified', 'end_date', 'checksum_md5', 'checksum', 'google_id', 'google_parent_id', 'rights_copyright', 'legal_status',
+         'held_by','note','archivist_note','date_archivist_note','original_identifier','other_format_version_identifier']]
     filelist.to_csv(downloadfinalMetadata, index=False)
     closure.to_csv(downloadPath+closureMetadata, index=False)
 tidy_metadata()
@@ -606,9 +558,9 @@ tidy_metadata()
 
 
 print('Validating metadata')
-subprocess.run(["csv-validator-distribution-1.3.0-bin\\csv-validator-cmd.bat", downloadfinalMetadata, schema, "-p:file:/=file:/"+validatePath], shell=True)
+subprocess.run([validatorPath, downloadfinalMetadata, schema, "-p:file:/=file:/"+validatePath], shell=True)
 print('Validating closure metadata')
-subprocess.run(["csv-validator-distribution-1.3.0-bin\\csv-validator-cmd.bat", downloadArea+closureMetadata, closureSchema, "-p:file:/=file:/"+validatePath], shell=True)
+subprocess.run([validatorPath, downloadArea+closureMetadata, closureSchema, "-p:file:/=file:/"+validatePath], shell=True)
 print('Generating metadata hash')
 with open(downloadfinalMetadata, 'rb') as afile:
     hash = afile.read()
